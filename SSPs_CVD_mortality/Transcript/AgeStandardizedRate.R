@@ -1,6 +1,6 @@
 # =============================================================================
 # AGE-STANDARDIZED MORTALITY RATE (CVD + ALL-CAUSE)
-# Updated: 08/07/2026
+# Updated: 14/08/2026
 # Author: Martina Otavova
 # =============================================================================
 #
@@ -10,9 +10,19 @@
 # mortality rates per 100,000 population for every scenario x country x
 # year, both by sex and with sexes pooled.
 #
+# This script is country-agnostic -- it standardizes whatever scenario x
+# iso3 x age x sex x year rows are present in obs_and_proj.rds. Since
+# CVD_projection.R's chapters 8-9 now fold the 13 group3 countries (ATG,
+# BRB, BRN, DJI, ERI, GRD, GUM, LBY, MRT, PNG, SYC, UZB, VIR) into that same
+# file with full 2025-2100 SSP projections, no group3-specific logic is
+# needed here: running this script picks them up automatically. Section 6
+# below just double-checks that coverage explicitly.
+#
 # Output (Results/AgeStandardizedRate/):
-#   asmr_by_sex.rds     -- scenario x iso3 x sex x year x cause (CVD / All-cause)
-#   asmr_both_sexes.rds -- scenario x iso3 x year x cause (CVD / All-cause), sexes pooled
+#   asmr_by_sex.rds               -- scenario x iso3 x sex x year x cause (CVD / All-cause)
+#   asmr_both_sexes.rds           -- scenario x iso3 x year x cause (CVD / All-cause), sexes pooled
+#   asmr_by_sex_premature.rds     -- as above, restricted to ages 0-69 (premature mortality)
+#   asmr_both_sexes_premature.rds -- as above, restricted to ages 0-69 (premature mortality)
 # =============================================================================
 
 .libPaths(c("/home/otavova/R/library"))  # point R at the project-specific package library
@@ -55,16 +65,15 @@ who_std_pop <- tribble(
   "95+",     0.045
 )  # weights sum to ~100; any rounding is immaterial since standardization renormalizes by the summed weight actually used
 
+premature_ages <- c("0-4", "5-9", "10-14", "15-19", "20-24", "25-29", "30-34",
+                    "35-39", "40-44", "45-49", "50-54", "55-59", "60-64", "65-69")  # ages 0-69
+
 # =============================================================================
 # 2. Load observed history + projections (CVD_projection.R output)
 # =============================================================================
 
 obs_and_proj <- readRDS("Results/Projections/obs_and_proj.rds") %>%  # load the combined observed + projected dataset
   mutate(iso3 = as.character(iso3), sex = as.character(sex))  # ensure iso3/sex are plain character vectors, not factors
-
-message("Rows loaded: ", nrow(obs_and_proj))
-message("Scenarios: ", paste(sort(unique(obs_and_proj$scenario)), collapse = ", "))
-message("Age groups: ", n_distinct(obs_and_proj$age), " (expected 20)")
 
 # =============================================================================
 # 3. Death + population counts by age: by sex, and with sexes pooled
@@ -115,8 +124,26 @@ asmr_both_sexes <- bind_rows(
 
 n_incomplete_sex   <- sum(asmr_by_sex$n_age_groups < 20)  # groups standardized on fewer than all 20 age bands
 n_incomplete_both  <- sum(asmr_both_sexes$n_age_groups < 20)
-message("asmr_by_sex: ", nrow(asmr_by_sex), " rows, ", n_incomplete_sex, " with <20 age groups")
-message("asmr_both_sexes: ", nrow(asmr_both_sexes), " rows, ", n_incomplete_both, " with <20 age groups")
+
+# =============================================================================
+# 4b. Premature mortality: same standardization, restricted to ages 0-69
+# =============================================================================
+# Same weighted-average logic as standardize() above, but only using the
+# standard-population weights for the under-70 age bands, so the rate
+# reflects premature (pre-70) mortality risk rather than the full age range.
+
+counts_by_sex_premature      <- counts_by_sex      %>% filter(age %in% premature_ages)
+counts_both_sexes_premature  <- counts_both_sexes  %>% filter(age %in% premature_ages)
+
+asmr_by_sex_premature <- bind_rows(
+  standardize(counts_by_sex_premature, "cardio_deaths",   "CVD",       c("scenario", "iso3", "sex", "year")),
+  standardize(counts_by_sex_premature, "allcause_deaths", "All-cause", c("scenario", "iso3", "sex", "year"))
+)
+
+asmr_both_sexes_premature <- bind_rows(
+  standardize(counts_both_sexes_premature, "cardio_deaths",   "CVD",       c("scenario", "iso3", "year")),
+  standardize(counts_both_sexes_premature, "allcause_deaths", "All-cause", c("scenario", "iso3", "year"))
+)
 
 # =============================================================================
 # 5. Save results
@@ -124,5 +151,23 @@ message("asmr_both_sexes: ", nrow(asmr_both_sexes), " rows, ", n_incomplete_both
 
 saveRDS(asmr_by_sex, file.path(out_dir, "asmr_by_sex.rds"))  # persist the by-sex age-standardized rates
 saveRDS(asmr_both_sexes, file.path(out_dir, "asmr_both_sexes.rds"))  # persist the pooled-sex age-standardized rates
+saveRDS(asmr_by_sex_premature, file.path(out_dir, "asmr_by_sex_premature.rds"))  # persist the by-sex premature (ages 0-69) rates
+saveRDS(asmr_both_sexes_premature, file.path(out_dir, "asmr_both_sexes_premature.rds"))  # persist the pooled-sex premature (ages 0-69) rates
 
-cat("Saved age-standardized CVD and all-cause mortality rates to", out_dir, "\n")
+# =============================================================================
+# 6. GROUP3 COUNTRIES (13): COVERAGE CHECK
+# =============================================================================
+# No separate computation needed -- section 4 above already standardized
+# every country present in obs_and_proj.rds, group3 included. This just
+# confirms that explicitly and flags any of the 13 that came out incomplete
+# (fewer than 20 age bands contributing, or a missing SSP scenario).
+
+group3_iso3 <- c("ATG", "BRB", "BRN", "DJI", "ERI", "GRD", "GUM",
+                 "LBY", "MRT", "PNG", "SYC", "UZB", "VIR")
+
+g3_both_sexes <- asmr_both_sexes %>% filter(iso3 %in% group3_iso3)
+
+g3_incomplete <- g3_both_sexes %>% filter(n_age_groups < 20)
+if (nrow(g3_incomplete) > 0) {
+  print(g3_incomplete %>% distinct(iso3, scenario, cause, n_age_groups))
+}

@@ -1,6 +1,6 @@
 # =============================================================================
 # COUNTRY PLOTS
-# Updated: 08/06/2026
+# Updated: 14/08/2026
 # Author: Martina Otavova
 # =============================================================================
 #
@@ -73,8 +73,6 @@ proj_raw <- obs_and_proj %>%
 rm(obs_and_proj)  # free memory now that obs_raw/proj_raw have been split out
 
 countries_plot <- sort(unique(proj_raw$iso3))  # alphabetically sorted list of all countries that have projections
-message("Countries: ", length(countries_plot))  # log how many countries will be plotted
-message("Native projection years: ", paste(sort(unique(proj_raw$year)), collapse = ", "))  # log which years the projections natively cover
 
 last_obs_year   <- max(obs_raw$year)   # most recent year with observed data (used to anchor projections visually)
 first_proj_year <- min(proj_raw$year)  # first year with projected data (used to anchor projections visually)
@@ -82,8 +80,6 @@ first_proj_year <- min(proj_raw$year)  # first year with projected data (used to
 # =============================================================================
 # 2. Country-level (both sexes combined): deaths + share
 # =============================================================================
-
-message("\n=== Section A: country-level plots (deaths + share, both sexes) ===")  # log the start of this section
 
 obs_country <- obs_raw %>%
   group_by(iso3, year) %>%  # collapse across age and sex, keeping only country x year
@@ -133,13 +129,10 @@ for (iso in countries_plot) {
   make_country_plot(iso, "cardio_share_pct", "CVD share of all-cause deaths (%)",
                     file.path(country_plots_share_dir, paste0(sanitize_filename(iso), ".png")))  # save the CVD-share plot for this country
 }
-cat("Saved", 2 * length(countries_plot), "country-level plots.\n")  # report total number of country-level plots saved
 
 # =============================================================================
 # 3. Country x age x sex: deaths
 # =============================================================================
-
-message("\n=== Section B: country x age x sex plots (deaths) ===")  # log the start of this section
 
 obs_as <- obs_raw %>%
   select(iso3, age, sex, year, death) %>%  # keep only the columns needed for age/sex-level plots
@@ -193,7 +186,6 @@ make_as_plot <- function(df_cell, title, y_label, out_path) {
 }
 
 n_saved <- 0  # counter for number of death plots saved in this section
-t0 <- Sys.time()  # start time, used to report progress/elapsed time
 
 for (cty in countries_plot) {
   cty_dir <- file.path(age_sex_dir, sanitize_filename(cty))  # per-country subfolder for this country's age/sex plots
@@ -211,23 +203,13 @@ for (cty in countries_plot) {
       n_saved <- n_saved + 1  # increment the saved-plot counter
     }
   }
-
-  if (which(countries_plot == cty) %% 20 == 0) {  # every 20th country, log progress
-    elapsed <- as.numeric(Sys.time() - t0, units = "secs")  # seconds elapsed since the section started
-    message(sprintf("  ...%d/%d countries, %d deaths plots saved, %.0fs elapsed",
-                    which(countries_plot == cty), length(countries_plot), n_saved, elapsed))  # progress message
-  }
 }
-
-cat("\nSection B completed.", n_saved, "country-age-sex deaths plots saved.\n")  # report total death plots saved
 
 rm(plot_df_as); gc()  # free the large combined data frame and garbage collect before the next section
 
 # =============================================================================
 # 4. Country x age x sex: share
 # =============================================================================
-
-message("\n=== Section C: country x age x sex plots (share) ===")  # log the start of this section
 
 obs_as_share <- obs_raw %>%
   filter(allcause_death > 0) %>%  # avoid divide-by-zero when computing a share
@@ -269,7 +251,6 @@ rm(obs_raw, proj_raw, obs_as_share, proj_as_share, anchor_obs_share, anchor_proj
   offsets_share, obs_shifted_share, proj_series_share, obs_country, proj_country); gc()  # free everything no longer needed and garbage collect
 
 n_saved_share <- 0  # counter for number of share plots saved in this section
-t0 <- Sys.time()  # start time, used to report progress/elapsed time
 
 for (cty in countries_plot) {
   cty_dir <- file.path(age_sex_share_dir, sanitize_filename(cty))  # per-country subfolder for this country's share plots
@@ -287,13 +268,4 @@ for (cty in countries_plot) {
       n_saved_share <- n_saved_share + 1  # increment the saved-plot counter
     }
   }
-
-  if (which(countries_plot == cty) %% 20 == 0) {  # every 20th country, log progress
-    elapsed <- as.numeric(Sys.time() - t0, units = "secs")  # seconds elapsed since the section started
-    message(sprintf("  ...%d/%d countries, %d share plots saved, %.0fs elapsed",
-                    which(countries_plot == cty), length(countries_plot), n_saved_share, elapsed))  # progress message
-  }
 }
-
-cat("\nScript 56 completed.", n_saved_share, "country-age-sex share plots saved.\n")  # report total share plots saved
-cat("All outputs saved under", out_dir, "\n")  # final confirmation of the output location

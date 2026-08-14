@@ -1,6 +1,6 @@
 # =============================================================================
 # AGE-STANDARDIZED RATE -- COUNTRY PLOTS
-# Updated: 08/07/2026
+# Updated: 14/08/2026
 # Author: Martina Otavova
 # =============================================================================
 #
@@ -10,6 +10,13 @@
 #   country_plots_allcause/  -- age-standardized all-cause mortality rate
 #                                (per 100,000, sexes pooled), one PNG per
 #                                country
+#
+# Section 2 below plots every country present in asmr_both_sexes.rds -- if
+# rerun from scratch that now includes the 13 group3 countries too (ATG,
+# BRB, BRN, DJI, ERI, GRD, GUM, LBY, MRT, PNG, SYC, UZB, VIR), since
+# AgeStandardizedRate.R's coverage now follows CVD_projection.R's combined
+# 188-country output. Section 3 instead targets just those 13, since the
+# other 175 already have plots on disk from a prior full run of section 2.
 #
 # =============================================================================
 
@@ -96,12 +103,35 @@ for (cause_label in names(causes)) {
   last_obs_year   <- max(obs_cause$year)   # most recent year with observed data (used to anchor projections visually)
   first_proj_year <- min(proj_cause$year)  # first year with projected data (used to anchor projections visually)
 
-  message("\n=== ", cause_label, ": ", length(countries_plot), " countries ===")
-
   for (iso in countries_plot) {
     make_asmr_plot(iso, obs_cause, proj_cause, cause_cfg$y_label, last_obs_year, first_proj_year,
                   file.path(cause_cfg$dir, paste0(sanitize_filename(iso), ".png")))  # save the ASMR plot for this country
   }
+}
 
-  cat("Saved", length(countries_plot), cause_label, "age-standardized rate country plots to", cause_cfg$dir, "\n")
+# =============================================================================
+# 3. GROUP3 COUNTRIES (13): AGE-STANDARDIZED RATE PLOTS
+# =============================================================================
+# Same make_asmr_plot() logic as section 2, restricted to the 13 countries
+# added by CVD_projection.R's chapters 8-10, so the other 175 (already
+# plotted by a prior full run of section 2) aren't regenerated.
+
+group3_iso3 <- c("ATG", "BRB", "BRN", "DJI", "ERI", "GRD", "GUM",
+                 "LBY", "MRT", "PNG", "SYC", "UZB", "VIR")
+
+for (cause_label in names(causes)) {
+  cause_cfg <- causes[[cause_label]]
+
+  asmr_cause <- asmr %>% filter(cause == cause_label)
+  obs_cause  <- asmr_cause %>% filter(scenario == "historical") %>% arrange(iso3, year)
+  proj_cause <- asmr_cause %>% filter(scenario != "historical")  %>% arrange(iso3, scenario, year)
+
+  countries_plot_g3 <- sort(intersect(group3_iso3, unique(proj_cause$iso3)))
+  last_obs_year   <- max(obs_cause$year)
+  first_proj_year <- min(proj_cause$year)
+
+  for (iso in countries_plot_g3) {
+    make_asmr_plot(iso, obs_cause, proj_cause, cause_cfg$y_label, last_obs_year, first_proj_year,
+                  file.path(cause_cfg$dir, paste0(sanitize_filename(iso), ".png")))
+  }
 }
