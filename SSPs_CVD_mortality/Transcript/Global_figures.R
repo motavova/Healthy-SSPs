@@ -16,12 +16,9 @@ dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 ssp_colours <- c("SSP1" = "#1b9e77", "SSP2" = "#d95f02", "SSP3" = "#7570b3",
                 "SSP4" = "#e7298a", "SSP5" = "#66a61e")
 
-source("Transcript/Sellers_regions.R")
+source("Transcript/WorldBankClassification.R")
 
-region_lookup <- bind_rows(
-  sellers_regions,
-  tibble(iso3 = c("CMR", "KIR"), region = c("Sub-Saharan Africa", "East Asia & Pacific"))
-)
+region_lookup <- world_bank_classification  # CMR/KIR are now covered directly in the table above; no manual patch needed
 
 region_levels <- c(
   "High-Income Countries", "Sub-Saharan Africa", "South Asia",
@@ -30,14 +27,20 @@ region_levels <- c(
 )
 
 # =============================================================================
-# 1. Load Samir 5-year recalculation, attach region
+# 1. Load current production projections (188 countries), attach region
 # =============================================================================
+# Was originally the Samir/WIC mx 5-year recalculation (Results/History/
+# proj_deaths_samir_5yr.rds, 175 countries, dated 06/08/2026) -- switched to
+# the current production pipeline's own output so these figures reflect
+# today's data (188 countries, urbanization-included risk factors, updated
+# regional classification) rather than a stale side analysis. proj_spline.rds
+# already sits on the same native 5-year grid (2025-2100), so no reshaping
+# is needed.
 
-proj_samir <- readRDS("Results/53_Recalc_CVD_Deaths_SamirMx/proj_deaths_samir_5yr.rds") %>%
+proj_samir <- readRDS("Results/Projections/proj_spline.rds") %>%
   mutate(iso3 = as.character(iso3), sex = as.character(sex)) %>%
   select(scenario, iso3, age, sex, year, pop,
-        pred_cardio_deaths = cardio_deaths_samir,
-        pred_allcause_deaths = allcause_deaths_samir) %>%
+        pred_cardio_deaths, pred_allcause_deaths) %>%
   left_join(region_lookup, by = "iso3")
 
 # =============================================================================
@@ -96,12 +99,25 @@ p_deaths <- ggplot(global_samir5yr, aes(x = year, y = cardio_deaths_millions, co
   geom_point(size = 1.5) +
   scale_colour_manual(values = ssp_colours, name = "SSP") +
   scale_x_continuous(breaks = c(2030, 2050, 2070, 2100)) +
-  labs(title = "Global CVD deaths: Samir/WIC mx recalculation (native 5-year steps)",
+  labs(title = "Global CVD deaths",
       x = NULL, y = "CVD deaths (millions)") +
   theme_bw(base_size = 12) +
   theme(legend.position = "bottom", panel.grid.minor = element_blank())
 
 ggsave(file.path(out_dir, "fig_global_ssp_deaths_samir5yr.png"), p_deaths, width = 10, height = 6, dpi = 300)
+
+p_share <- ggplot(global_samir5yr, aes(x = year, y = cardio_share, colour = scenario)) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 1.5) +
+  scale_colour_manual(values = ssp_colours, name = "SSP") +
+  scale_x_continuous(breaks = c(2030, 2050, 2070, 2100)) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  labs(title = "CVD share of all-cause deaths",
+      x = NULL, y = "CVD share of all-cause deaths") +
+  theme_bw(base_size = 12) +
+  theme(legend.position = "bottom", panel.grid.minor = element_blank())
+
+ggsave(file.path(out_dir, "fig_global_ssp_share_samir5yr.png"), p_share, width = 10, height = 6, dpi = 300)
 
 # =============================================================================
 # 4. fig3: CVD share by sex, region and SSP -- 2060 and 2100 side by side
@@ -128,7 +144,7 @@ p_sex_share <- ggplot(sex_share_data, aes(x = region, y = cardio_share, fill = s
   scale_fill_manual(values = ssp_colours, breaks = c("SSP1", "SSP2", "SSP3", "SSP4", "SSP5"),
                     labels = c("1", "2", "3", "4", "5"), name = "SSP") +
   scale_y_continuous(labels = percent_format(accuracy = 1), expand = expansion(mult = c(0, 0.05))) +
-  labs(title = "Cardiovascular share of all-cause deaths by sex, region and SSP (Samir/WIC mx, 5yr)",
+  labs(title = "Cardiovascular share of all-cause deaths by sex, region and SSP",
       x = NULL, y = "Proportion of deaths") +
   theme_bw(base_size = 11) +
   theme(
@@ -174,7 +190,7 @@ for (plot_year in years) {
     scale_y_continuous(labels = percent_format(accuracy = 1),
                       limits = c(0, shared_max * 1.05),
                       expand = expansion(mult = c(0, 0.02))) +
-    labs(title = paste0("Cardiovascular share of all-cause deaths by region and SSP (Samir/WIC mx, 5yr) — ", plot_year),
+    labs(title = paste0("Cardiovascular share of all-cause deaths by region and SSP — ", plot_year),
         x = NULL, y = "Proportion of deaths") +
     theme_bw(base_size = 12) +
     theme(
@@ -198,7 +214,7 @@ p_combined_share <- ggplot(combined_share_data, aes(x = region, y = cardio_share
   scale_fill_manual(values = ssp_colours, breaks = c("SSP1", "SSP2", "SSP3", "SSP4", "SSP5"),
                     labels = c("1", "2", "3", "4", "5"), name = "SSP") +
   scale_y_continuous(labels = percent_format(accuracy = 1), expand = expansion(mult = c(0, 0.05))) +
-  labs(title = "Cardiovascular share of all-cause deaths by region and SSP (Samir/WIC mx, 5yr)",
+  labs(title = "Cardiovascular share of all-cause deaths by region and SSP",
       x = NULL, y = "Proportion of deaths") +
   theme_bw(base_size = 12) +
   theme(

@@ -4,9 +4,15 @@
 # Author: Martina Otavova
 #
 # Reproduces the regional CVD-share figures (sex x region x SSP, and
-# region x SSP by year) for both regional divisions produced by
-# RegionalSummaryMeasures.R -- Sellers (2020) and World Bank -- saving each
-# set of figures into its own subfolder.
+# region x SSP by year) for the regional division produced by
+# RegionalSummaryMeasures.R -- WorldBankUpdate (World Bank's current country
+# classification, with a High-Income bucket pulled out of geography).
+#
+# This used to also loop over a second "WorldBank" scheme (countrycode's
+# region field, no High-Income carve-out), but that scheme's country
+# membership was stale relative to the World Bank's current classification
+# and has been retired; its last output is archived at
+# Results/History/RegionalSummaries_old_worldbank/.
 # =============================================================================
 
 setwd("/home/otavova/Healthy-SSPs/SSPs_CVD_mortality")
@@ -24,27 +30,15 @@ ssp_colours <- c("SSP1" = "#1b9e77", "SSP2" = "#d95f02", "SSP3" = "#7570b3",
                 "SSP4" = "#e7298a", "SSP5" = "#66a61e")
 
 schemes <- list(
-  Sellers = list(
-    summary_rds     = file.path(summary_dir, "regional_summary_sellers.rds"),
-    summary_sex_rds = file.path(summary_dir, "regional_summary_sellers_sex.rds"),
-    out_dir         = file.path(plot_dir, "Sellers"),
-    label           = "Sellers regions",
+  WorldBankUpdate = list(
+    summary_rds     = file.path(summary_dir, "regional_summary_worldbankupdate.rds"),
+    summary_sex_rds = file.path(summary_dir, "regional_summary_worldbankupdate_sex.rds"),
+    out_dir         = file.path(plot_dir, "WorldBankUpdate"),
+    label           = "World Bank regions",
     recode          = c("High-Income" = "High-Income Countries"),
     region_levels   = c(
       "High-Income Countries", "Sub-Saharan Africa", "South Asia",
-      "Middle East & North Africa", "Latin America & Caribbean",
-      "Europe & Central Asia", "East Asia & Pacific"
-    )
-  ),
-  WorldBank = list(
-    summary_rds     = file.path(summary_dir, "regional_summary_worldbank.rds"),
-    summary_sex_rds = file.path(summary_dir, "regional_summary_worldbank_sex.rds"),
-    out_dir         = file.path(plot_dir, "WorldBank"),
-    label           = "World Bank regions",
-    recode          = c(),
-    region_levels   = c(
-      "North America", "Sub-Saharan Africa", "South Asia",
-      "Middle East & North Africa", "Latin America & Caribbean",
+      "Middle East, North Africa, Afghanistan & Pakistan", "Latin America & Caribbean",
       "Europe & Central Asia", "East Asia & Pacific"
     )
   )
@@ -71,34 +65,40 @@ for (scheme in schemes) {
     regional_summary_sex %>%
       filter(year == plot_year) %>%
       mutate(
-        region   = factor(recode_region(region), levels = scheme$region_levels),
-        ssp      = factor(scenario, levels = c("SSP5", "SSP4", "SSP3", "SSP2", "SSP1")),
-        sex_year = paste0(sex, " ", plot_year)
+        region     = factor(recode_region(region), levels = scheme$region_levels),
+        ssp        = factor(scenario, levels = c("SSP5", "SSP4", "SSP3", "SSP2", "SSP1")),
+        sex_year   = paste0(sex, " ", plot_year),
+        cardio_deaths_millions = cardio_deaths / 1e6
       )
   }
 
   sex_share_data <- bind_rows(make_sex_share_data(2060), make_sex_share_data(2100)) %>%
     mutate(sex_year = factor(sex_year, levels = c("Female 2060", "Male 2060", "Female 2100", "Male 2100")))
 
-  p_sex_share <- ggplot(sex_share_data, aes(x = region, y = cardio_share, fill = ssp)) +
-    geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  p_sex_share <- ggplot(sex_share_data, aes(x = region, y = cardio_deaths_millions, fill = ssp)) +
+    geom_col(position = position_dodge(width = 0.9), width = 0.88) +
     coord_flip() +
     facet_wrap(~ sex_year, nrow = 2) +
     scale_fill_manual(values = ssp_colours, breaks = c("SSP1", "SSP2", "SSP3", "SSP4", "SSP5"),
                       labels = c("1", "2", "3", "4", "5"), name = "SSP") +
-    scale_y_continuous(labels = percent_format(accuracy = 1), expand = expansion(mult = c(0, 0.05))) +
-    labs(title = "Cardiovascular share of all-cause deaths by sex, region and SSP",
-        x = NULL, y = "Proportion of deaths") +
-    theme_bw(base_size = 11) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+    labs(title = "Cardiovascular deaths by sex, region and SSP",
+        x = NULL, y = "Cardiovascular deaths (millions)") +
+    theme_bw(base_size = 14) +
     theme(
-      plot.title         = element_text(face = "bold", size = 12),
+      plot.title         = element_text(face = "bold", size = 16),
+      strip.text         = element_text(size = 13),
+      axis.text          = element_text(size = 12),
+      axis.title         = element_text(size = 13),
+      legend.text        = element_text(size = 12),
+      legend.title       = element_text(size = 13),
       panel.grid.major.y = element_blank(),
       panel.grid.minor   = element_blank(),
       legend.position    = "right"
     )
 
-  ggsave(file.path(scheme$out_dir, "fig3_sex_cvd_share_2060_2100.png"), p_sex_share,
-        width = 13, height = ceiling(n_regions * 0.4) + 4, dpi = 150, limitsize = FALSE)
+  ggsave(file.path(scheme$out_dir, "fig3_sex_cvd_deaths_2060_2100.png"), p_sex_share,
+        width = 15, height = ceiling(n_regions * 0.75) + 4, dpi = 150, limitsize = FALSE)
 
   # ===========================================================================
   # fig4: CVD share by region and SSP, both sexes combined
